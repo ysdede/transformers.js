@@ -118,6 +118,19 @@ async function getSession(pretrained_model_name_or_path, fileName, options, is_d
     // Overwrite `executionProviders` if not specified
     session_options.executionProviders ??= executionProviders;
 
+    // Workaround for ORT-WebGPU encoder lifetime/prepack instability observed on
+    // Nemo Conformer TDT encoder runs in browser.
+    if (
+        !apis.IS_NODE_ENV &&
+        selectedDevice === 'webgpu' &&
+        options.config?.model_type === 'nemo-conformer-tdt' &&
+        fileName === 'encoder_model'
+    ) {
+        const extra = (session_options.extra ??= {});
+        const extraSession = (/** @type {any} */ (extra).session ??= {});
+        /** @type {any} */ (extraSession).disable_prepacking ??= '1';
+    }
+
     // Overwrite `freeDimensionOverrides` if specified in config and not set in session options
     const free_dimension_overrides = custom_config.free_dimension_overrides;
     if (free_dimension_overrides) {
