@@ -167,6 +167,49 @@ export function buildTransducerDetailedOutputs(tokenizer, token_ids, token_times
 
     finalizeAndPushWord(words, current);
 
+    // Fallback for character-level tokenizers (e.g., Danish RNNT) where individual
+    // tokens lack ▁/Ġ word-start markers. Decode the full sequence to get the text
+    // with proper spaces, then use those spaces to detect word boundaries.
+    if (words.length <= 1 && tokens.length > 1) {
+        const fullDecoded = tokenizer
+            .decode(token_ids, { skip_special_tokens: true, clean_up_tokenization_spaces: false })
+            .trimStart();
+
+        words.length = 0;
+        current = null;
+        let pos = 0;
+
+        for (let j = 0; j < tokens.length; j++) {
+            let foundSpace = false;
+            while (pos < fullDecoded.length && /\s/.test(fullDecoded[pos])) {
+                foundSpace = true;
+                pos++;
+            }
+
+            const startsNewWord = j === 0 || foundSpace;
+            tokens[j].is_word_start = startsNewWord;
+            pos += tokens[j].token.length;
+
+            if (!current || startsNewWord) {
+                finalizeAndPushWord(words, current);
+                current = {
+                    text: tokens[j].token,
+                    start: tokens[j].start_time,
+                    end: tokens[j].end_time,
+                    confs: tokens[j].confidence != null ? [tokens[j].confidence] : [],
+                };
+            } else {
+                current.text += tokens[j].token;
+                current.end = tokens[j].end_time;
+                if (tokens[j].confidence != null) {
+                    current.confs.push(tokens[j].confidence);
+                }
+            }
+        }
+
+        finalizeAndPushWord(words, current);
+    }
+
     const word_confidences = words.some((x) => x.confidence != null) ? words.map((x) => x.confidence ?? null) : null;
     let word_avg = null;
     if (word_confidences) {

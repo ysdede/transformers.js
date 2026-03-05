@@ -57,7 +57,7 @@ function roundTs(value) {
 }
 
 /**
- * @param {Float32Array|number[]} logits
+ * @param {import('../../utils/tensor.js').DataArray} logits
  * @param {number} tokenId
  * @param {number} vocabSize
  * @returns {{ confidence: number, logProb: number }}
@@ -175,6 +175,7 @@ function resolveTransducerConfig(config, sessions) {
     const frameShiftS = transducerConfig.frame_shift_s ?? 0.01;
     const blankTokenId = transducerConfig.blank_token_id ?? 0;
     const encoderOutputLayout = transducerConfig.encoder_output_layout;
+    const encoderLengthDType = transducerConfig.encoder_length_dtype ?? 'int64';
     const decoderTokenDType = transducerConfig.decoder_token_dtype ?? 'int32';
     const decoderTokenLengthDType = transducerConfig.decoder_token_length_dtype ?? 'int32';
 
@@ -194,6 +195,11 @@ function resolveTransducerConfig(config, sessions) {
     }
     if (encoderOutputLayout !== 'BDT' && encoderOutputLayout !== 'BTD') {
         throw new Error('Invalid `transformers.js_config.transducer.encoder_output_layout`: expected "BDT" or "BTD".');
+    }
+    if (!['int32', 'int64'].includes(encoderLengthDType)) {
+        throw new Error(
+            'Invalid `transformers.js_config.transducer.encoder_length_dtype`: expected "int32" or "int64".',
+        );
     }
     if (!['int32', 'int64'].includes(decoderTokenDType)) {
         throw new Error(
@@ -216,6 +222,7 @@ function resolveTransducerConfig(config, sessions) {
         encoder_input_layout: transducerConfig.encoder_input_layout ?? 'BTF',
         encoder_output_layout: encoderOutputLayout,
         encoder_frame_layout: transducerConfig.encoder_frame_layout ?? 'BD1',
+        encoder_length_dtype: encoderLengthDType,
         decoder_token_dtype: decoderTokenDType,
         decoder_token_length_dtype: decoderTokenLengthDType,
         decoder: {
@@ -448,7 +455,9 @@ export class NemoConformerForTDT extends NemoConformerTDTPreTrainedModel {
                 } else {
                     length = inputFeatures.dims[1];
                 }
-                const lengthTensor = new Tensor('int64', BigInt64Array.from([BigInt(length)]), [1]);
+                const lengthTensor = this.transducer.encoder_length_dtype === 'int64'
+                    ? new Tensor('int64', BigInt64Array.from([BigInt(length)]), [1])
+                    : new Tensor('int32', new Int32Array([length]), [1]);
                 disposables.push(lengthTensor);
                 feeds[name] = lengthTensor;
                 continue;
