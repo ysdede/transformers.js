@@ -188,7 +188,7 @@ export function buildTransducerDetailedOutputs(tokenizer, token_ids, token_times
 
             const startsNewWord = j === 0 || foundSpace;
             tokens[j].is_word_start = startsNewWord;
-            pos += tokens[j].token.length;
+            pos = Math.min(pos + tokens[j].token.length, fullDecoded.length);
 
             if (!current || startsNewWord) {
                 finalizeAndPushWord(words, current);
